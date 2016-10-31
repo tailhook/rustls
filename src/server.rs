@@ -3,7 +3,7 @@ use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::ContentType;
 use msgs::enums::{AlertDescription, HandshakeType};
 use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
-use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
+use msgs::handshake::{ServerNameRequest, SupportedSignatureSchemes};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
 use msgs::message::Message;
 use msgs::codec::Codec;
@@ -77,14 +77,14 @@ pub trait ProducesTickets {
 
 pub trait ResolvesCert {
   /// Choose a certificate chain and matching key given any SNI,
-  /// sigalgs, EC curves and EC point format extensions
+  /// signature schemes, EC curves and EC point format extensions
   /// from the client.
   ///
   /// The certificate chain is returned as a `CertificatePayload`,
   /// the key is inside a `Signer`.
   fn resolve(&self,
              server_name: Option<&ServerNameRequest>,
-             sigalgs: &SupportedSignatureAlgorithms,
+             sigschemes: &SupportedSignatureSchemes,
              ec_curves: &EllipticCurveList,
              ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()>;
 }
@@ -200,7 +200,7 @@ struct FailResolveChain {}
 impl ResolvesCert for FailResolveChain {
   fn resolve(&self,
              _server_name: Option<&ServerNameRequest>,
-             _sigalgs: &SupportedSignatureAlgorithms,
+             _sigschemes: &SupportedSignatureSchemes,
              _ec_curves: &EllipticCurveList,
              _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
     Err(())
@@ -228,7 +228,7 @@ impl AlwaysResolvesChain {
 impl ResolvesCert for AlwaysResolvesChain {
   fn resolve(&self,
              _server_name: Option<&ServerNameRequest>,
-             _sigalgs: &SupportedSignatureAlgorithms,
+             _sigschemes: &SupportedSignatureSchemes,
              _ec_curves: &EllipticCurveList,
              _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
     Ok((self.chain.clone(), self.key.clone()))

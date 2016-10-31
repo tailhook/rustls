@@ -3,8 +3,8 @@ use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
-use msgs::handshake::{DistinguishedNames, SupportedSignatureAlgorithms, ASN1Cert};
-use msgs::handshake::SignatureAndHashAlgorithm;
+use msgs::handshake::{DistinguishedNames, SupportedSignatureSchemes, ASN1Cert};
+use msgs::enums::SignatureScheme;
 use msgs::enums::ContentType;
 use msgs::message::Message;
 use msgs::persist;
@@ -88,7 +88,7 @@ impl StoresClientSessions for ClientSessionMemoryCache {
 /// private key for the purposes of client authentication.
 pub trait ResolvesClientCert {
   /// With the server-supplied acceptable issuers in `acceptable_issuers`,
-  /// the server's supported signature algorithms in `sigalgs`,
+  /// the server's supported signature schemes in `sigschemes`,
   /// return a certificate chain and signing key to authenticate.
   ///
   /// Return None to continue the handshake without any client
@@ -96,7 +96,7 @@ pub trait ResolvesClientCert {
   /// if it requires authentication.
   fn resolve(&self,
              acceptable_issuers: &DistinguishedNames,
-             sigalgs: &SupportedSignatureAlgorithms)
+             sigschemes: &SupportedSignatureSchemes)
     -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)>;
 
   /// Return true if any certificates at all are available.
@@ -108,7 +108,7 @@ struct FailResolveClientCert {}
 impl ResolvesClientCert for FailResolveClientCert {
   fn resolve(&self,
              _acceptable_issuers: &DistinguishedNames,
-             _sigalgs: &SupportedSignatureAlgorithms)
+             _sigschemes: &SupportedSignatureSchemes)
     -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)>
   {
     None
@@ -138,7 +138,7 @@ impl AlwaysResolvesClientCert {
 impl ResolvesClientCert for AlwaysResolvesClientCert {
   fn resolve(&self,
              _acceptable_issuers: &DistinguishedNames,
-             _sigalgs: &SupportedSignatureAlgorithms)
+             _sigschemes: &SupportedSignatureSchemes)
     -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)>
   {
     Some((self.chain.clone(), self.key.clone()))
@@ -255,7 +255,7 @@ pub struct ClientHandshakeData {
   pub new_ticket: Vec<u8>,
   pub new_ticket_lifetime: u32,
   pub doing_client_auth: bool,
-  pub client_auth_sigalg: Option<SignatureAndHashAlgorithm>,
+  pub client_auth_sigscheme: Option<SignatureScheme>,
   pub client_auth_cert: Option<CertificatePayload>,
   pub client_auth_key: Option<Arc<Box<sign::Signer + Send + Sync>>>
 }
@@ -277,7 +277,7 @@ impl ClientHandshakeData {
       new_ticket: Vec::new(),
       new_ticket_lifetime: 0,
       doing_client_auth: false,
-      client_auth_sigalg: None,
+      client_auth_sigscheme: None,
       client_auth_cert: None,
       client_auth_key: None
     }

@@ -4,7 +4,8 @@ use untrusted;
 
 use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;
-use msgs::handshake::SignatureAndHashAlgorithm;
+use msgs::enums::SignatureScheme;
+use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{DistinguishedName, DistinguishedNames};
 use error::TLSError;
 use pemfile;
@@ -227,22 +228,21 @@ static RSA_SHA256: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA256 
 static RSA_SHA384: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA384 ];
 static RSA_SHA512: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA512 ];
 
-fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<SignatureAlgorithms, TLSError> {
+fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSError> {
   use msgs::enums::SignatureAlgorithm::{ECDSA, RSA};
   use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
-  match (&sh.sign, &sh.hash) {
-    (&ECDSA, &SHA1)   => Ok(ECDSA_SHA1),
-    (&ECDSA, &SHA256) => Ok(ECDSA_SHA256),
-    (&ECDSA, &SHA384) => Ok(ECDSA_SHA384),
-    (&ECDSA, &SHA512) => Ok(ECDSA_SHA512),
-    (&RSA, &SHA1)     => Ok(RSA_SHA1),
-    (&RSA, &SHA256)   => Ok(RSA_SHA256),
-    (&RSA, &SHA384)   => Ok(RSA_SHA384),
-    (&RSA, &SHA512)   => Ok(RSA_SHA512),
+  match (scheme.sign(), scheme.hash()) {
+    (ECDSA, SHA1)   => Ok(ECDSA_SHA1),
+    (ECDSA, SHA256) => Ok(ECDSA_SHA256),
+    (ECDSA, SHA384) => Ok(ECDSA_SHA384),
+    (ECDSA, SHA512) => Ok(ECDSA_SHA512),
+    (RSA, SHA1)     => Ok(RSA_SHA1),
+    (RSA, SHA256)   => Ok(RSA_SHA256),
+    (RSA, SHA384)   => Ok(RSA_SHA384),
+    (RSA, SHA512)   => Ok(RSA_SHA512),
     _ => {
-      let error_msg = format!("received unadvertised sigalg {:?} {:?}",
-                              sh.sign, sh.hash);
+      let error_msg = format!("received unadvertised sig scheme {:?}", scheme);
       Err(TLSError::PeerMisbehavedError(error_msg))
     }
   }
@@ -275,7 +275,7 @@ pub fn verify_signed_struct(message: &[u8],
                             cert: &ASN1Cert,
                             dss: &DigitallySignedStruct) -> Result<(), TLSError> {
 
-  let possible_algs = try!(convert_alg(&dss.alg));
+  let possible_algs = try!(convert_scheme(dss.scheme));
   let cert_in = untrusted::Input::from(&cert.0);
   let cert = try!(webpki::EndEntityCert::from(cert_in)
                   .map_err(|err| TLSError::WebPKIError(err)));
