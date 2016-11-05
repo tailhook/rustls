@@ -200,6 +200,7 @@ static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
 static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 
 pub struct SessionCommon {
+  pub is_tls13: bool,
   message_cipher: Box<MessageCipher + Send + Sync>,
   write_seq: u64,
   read_seq: u64,
@@ -218,6 +219,7 @@ pub struct SessionCommon {
 impl SessionCommon {
   pub fn new(mtu: Option<usize>) -> SessionCommon {
     SessionCommon {
+      is_tls13: false,
       message_cipher: MessageCipher::invalid(),
       write_seq: 0,
       read_seq: 0,
@@ -232,6 +234,14 @@ impl SessionCommon {
       sendable_plaintext: ChunkVecBuffer::new(),
       sendable_tls: ChunkVecBuffer::new(),
     }
+  }
+
+  pub fn set_message_cipher(&mut self, cipher: Box<MessageCipher + Send + Sync>) {
+    self.message_cipher = cipher;
+    self.write_seq = 0;
+    self.read_seq = 0;
+    self.peer_encrypting = true;
+    self.we_encrypting = true;
   }
 
   pub fn has_readable_plaintext(&self) -> bool {
@@ -400,8 +410,8 @@ impl SessionCommon {
     Ok(len)
   }
 
-  pub fn start_encryption(&mut self, suite: &'static SupportedCipherSuite, secrets: &SessionSecrets) {
-    self.message_cipher = MessageCipher::new(suite, secrets);
+  pub fn start_encryption_tls12(&mut self, suite: &'static SupportedCipherSuite, secrets: &SessionSecrets) {
+    self.message_cipher = MessageCipher::new_tls12(suite, secrets);
   }
 
   pub fn peer_now_encrypting(&mut self) {

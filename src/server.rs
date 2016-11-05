@@ -4,7 +4,6 @@ use msgs::enums::ContentType;
 use msgs::enums::{AlertDescription, HandshakeType};
 use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureSchemes};
-use msgs::handshake::{EllipticCurveList, ECPointFormatList};
 use msgs::message::Message;
 use msgs::codec::Codec;
 use hash_hs;
@@ -76,17 +75,15 @@ pub trait ProducesTickets {
 }
 
 pub trait ResolvesCert {
-  /// Choose a certificate chain and matching key given any SNI,
-  /// signature schemes, EC curves and EC point format extensions
-  /// from the client.
+  /// Choose a certificate chain and matching key given any SNI and
+  /// signature schemes.
   ///
   /// The certificate chain is returned as a `CertificatePayload`,
   /// the key is inside a `Signer`.
   fn resolve(&self,
              server_name: Option<&ServerNameRequest>,
-             sigschemes: &SupportedSignatureSchemes,
-             ec_curves: &EllipticCurveList,
-             ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()>;
+             sigschemes: &SupportedSignatureSchemes)
+    -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()>;
 }
 
 /// Common configuration for a set of server sessions.
@@ -200,9 +197,8 @@ struct FailResolveChain {}
 impl ResolvesCert for FailResolveChain {
   fn resolve(&self,
              _server_name: Option<&ServerNameRequest>,
-             _sigschemes: &SupportedSignatureSchemes,
-             _ec_curves: &EllipticCurveList,
-             _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+             _sigschemes: &SupportedSignatureSchemes)
+    -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
     Err(())
   }
 }
@@ -228,9 +224,8 @@ impl AlwaysResolvesChain {
 impl ResolvesCert for AlwaysResolvesChain {
   fn resolve(&self,
              _server_name: Option<&ServerNameRequest>,
-             _sigschemes: &SupportedSignatureSchemes,
-             _ec_curves: &EllipticCurveList,
-             _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+             _sigschemes: &SupportedSignatureSchemes)
+    -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
     Ok((self.chain.clone(), self.key.clone()))
   }
 }
@@ -465,9 +460,9 @@ impl ServerSessionImpl {
     Ok(())
   }
 
-  pub fn start_encryption(&mut self) {
+  pub fn start_encryption_tls12(&mut self) {
     let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-    self.common.start_encryption(scs, self.secrets.as_ref().unwrap());
+    self.common.start_encryption_tls12(scs, self.secrets.as_ref().unwrap());
   }
 
   pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {

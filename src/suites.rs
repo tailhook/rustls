@@ -1,4 +1,4 @@
-use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme, NamedCurve};
+use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme, NamedGroup};
 use msgs::handshake::{KeyExchangeAlgorithm};
 use msgs::handshake::SupportedSignatureSchemes;
 use msgs::handshake::DecomposedSignatureScheme;
@@ -27,17 +27,18 @@ pub struct KeyExchangeResult {
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
 pub struct KeyExchange {
+  pub group: NamedGroup,
   alg: &'static ring::agreement::Algorithm,
   privkey: ring::agreement::EphemeralPrivateKey,
   pub pubkey: Vec<u8>
 }
 
 impl KeyExchange {
-  pub fn named_curve_to_ecdh_alg(named_curve: &NamedCurve) -> Option<&'static ring::agreement::Algorithm> {
-    match named_curve {
-      &NamedCurve::X25519 => Some(&ring::agreement::X25519),
-      &NamedCurve::secp256r1 => Some(&ring::agreement::ECDH_P256),
-      &NamedCurve::secp384r1 => Some(&ring::agreement::ECDH_P384),
+  pub fn named_group_to_ecdh_alg(group: NamedGroup) -> Option<&'static ring::agreement::Algorithm> {
+    match group {
+      NamedGroup::X25519 => Some(&ring::agreement::X25519),
+      NamedGroup::secp256r1 => Some(&ring::agreement::ECDH_P256),
+      NamedGroup::secp384r1 => Some(&ring::agreement::ECDH_P384),
       _ => None
     }
   }
@@ -46,12 +47,12 @@ impl KeyExchange {
     let mut rd = Reader::init(&kx_params);
     let ecdh_params = try_ret!(ServerECDHParams::read(&mut rd));
 
-    try_ret!(KeyExchange::start_ecdhe(&ecdh_params.curve_params.named_curve))
+    try_ret!(KeyExchange::start_ecdhe(ecdh_params.curve_params.named_group))
       .complete(&ecdh_params.public.0)
   }
 
-  pub fn start_ecdhe(named_curve: &NamedCurve) -> Option<KeyExchange> {
-    let alg = try_ret!(KeyExchange::named_curve_to_ecdh_alg(named_curve));
+  pub fn start_ecdhe(named_group: NamedGroup) -> Option<KeyExchange> {
+    let alg = try_ret!(KeyExchange::named_group_to_ecdh_alg(named_group));
     let rng = ring::rand::SystemRandom::new();
     let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng)
       .unwrap();
@@ -60,7 +61,12 @@ impl KeyExchange {
     pubkey.resize(ours.public_key_len(), 0u8);
     ours.compute_public_key(pubkey.as_mut_slice()).unwrap();
 
-    Some(KeyExchange { alg: alg, privkey: ours, pubkey: pubkey })
+    Some(KeyExchange {
+      group: named_group,
+      alg: alg,
+      privkey: ours,
+      pubkey: pubkey
+    })
   }
 
   pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
@@ -70,7 +76,7 @@ impl KeyExchange {
     self.complete(&ecdh_params.public.0)
   }
 
-  fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
+  pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
     let secret = ring::agreement::agree_ephemeral(
       self.privkey,
       self.alg,
@@ -99,7 +105,6 @@ pub struct SupportedCipherSuite {
   pub bulk: BulkAlgorithm,
   pub hash: HashAlgorithm,
   pub sign: SignatureAlgorithm,
-  pub mac_key_len: usize,
   pub enc_key_len: usize,
   pub fixed_iv_len: usize,
 
@@ -137,9 +142,9 @@ impl SupportedCipherSuite {
     }
   }
 
-  pub fn start_server_kx(&self, named_curve: &NamedCurve) -> Option<KeyExchange> {
+  pub fn start_server_kx(&self, named_group: NamedGroup) -> Option<KeyExchange> {
     match &self.kx {
-      &KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_curve),
+      &KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_group),
       _ => None
     }
   }
@@ -173,7 +178,7 @@ impl SupportedCipherSuite {
   }
 
   pub fn key_block_len(&self) -> usize {
-    (self.mac_key_len + self.enc_key_len + self.fixed_iv_len) * 2 + self.explicit_nonce_len
+    (self.enc_key_len + self.fixed_iv_len) * 2 + self.explicit_nonce_len
   }
 }
 
@@ -184,7 +189,6 @@ SupportedCipherSuite {
   sign: SignatureAlgorithm::ECDSA,
   bulk: BulkAlgorithm::CHACHA20_POLY1305,
   hash: HashAlgorithm::SHA256,
-  mac_key_len: 0,
   enc_key_len: 32,
   fixed_iv_len: 12,
   explicit_nonce_len: 0
@@ -197,7 +201,6 @@ SupportedCipherSuite {
   sign: SignatureAlgorithm::RSA,
   bulk: BulkAlgorithm::CHACHA20_POLY1305,
   hash: HashAlgorithm::SHA256,
-  mac_key_len: 0,
   enc_key_len: 32,
   fixed_iv_len: 12,
   explicit_nonce_len: 0
@@ -210,7 +213,6 @@ SupportedCipherSuite {
   sign: SignatureAlgorithm::RSA,
   bulk: BulkAlgorithm::AES_128_GCM,
   hash: HashAlgorithm::SHA256,
-  mac_key_len: 0,
   enc_key_len: 16,
   fixed_iv_len: 4,
   explicit_nonce_len: 8
@@ -223,7 +225,6 @@ SupportedCipherSuite {
   sign: SignatureAlgorithm::RSA,
   bulk: BulkAlgorithm::AES_256_GCM,
   hash: HashAlgorithm::SHA384,
-  mac_key_len: 0,
   enc_key_len: 32,
   fixed_iv_len: 4,
   explicit_nonce_len: 8
@@ -236,7 +237,6 @@ SupportedCipherSuite {
   sign: SignatureAlgorithm::ECDSA,
   bulk: BulkAlgorithm::AES_128_GCM,
   hash: HashAlgorithm::SHA256,
-  mac_key_len: 0,
   enc_key_len: 16,
   fixed_iv_len: 4,
   explicit_nonce_len: 8
@@ -249,14 +249,55 @@ SupportedCipherSuite {
   sign: SignatureAlgorithm::ECDSA,
   bulk: BulkAlgorithm::AES_256_GCM,
   hash: HashAlgorithm::SHA384,
-  mac_key_len: 0,
   enc_key_len: 32,
   fixed_iv_len: 4,
   explicit_nonce_len: 8
 };
 
+pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+SupportedCipherSuite {
+  suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+  kx: KeyExchangeAlgorithm::BulkOnly,
+  sign: SignatureAlgorithm::Anonymous,
+  bulk: BulkAlgorithm::CHACHA20_POLY1305,
+  hash: HashAlgorithm::SHA256,
+  enc_key_len: 32,
+  fixed_iv_len: 12,
+  explicit_nonce_len: 0
+};
+
+pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
+SupportedCipherSuite {
+  suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
+  kx: KeyExchangeAlgorithm::BulkOnly,
+  sign: SignatureAlgorithm::Anonymous,
+  bulk: BulkAlgorithm::AES_256_GCM,
+  hash: HashAlgorithm::SHA384,
+  enc_key_len: 32,
+  fixed_iv_len: 12,
+  explicit_nonce_len: 0
+};
+
+pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
+SupportedCipherSuite {
+  suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+  kx: KeyExchangeAlgorithm::BulkOnly,
+  sign: SignatureAlgorithm::Anonymous,
+  bulk: BulkAlgorithm::AES_128_GCM,
+  hash: HashAlgorithm::SHA256,
+  enc_key_len: 16,
+  fixed_iv_len: 12,
+  explicit_nonce_len: 0
+};
+
 /// A list of all the cipher suites supported by rustls.
-pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 6] = [
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 9] = [
+  /* TLS1.3 suites */
+  &TLS13_CHACHA20_POLY1305_SHA256,
+  &TLS13_AES_256_GCM_SHA384,
+  &TLS13_AES_128_GCM_SHA256,
+
+  /* TLS1.2 suites */
   &TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
   &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
   &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,

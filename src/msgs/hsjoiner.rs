@@ -55,7 +55,7 @@ impl HandshakeJoiner {
 
     let mut count = 0;
     while self.buf_contains_message() {
-      if !self.deframe_one() {
+      if !self.deframe_one(msg.version) {
         return None;
       }
 
@@ -77,10 +77,10 @@ impl HandshakeJoiner {
   /// the back of our `frames` deque inside a normal `Message`.
   ///
   /// Returns false if the stream is desynchronised beyond repair.
-  fn deframe_one(&mut self) -> bool {
+  fn deframe_one(&mut self, version: ProtocolVersion) -> bool {
     let used = {
       let mut rd = codec::Reader::init(&self.buf);
-      let payload = HandshakeMessagePayload::read(&mut rd);
+      let payload = HandshakeMessagePayload::read_version(&mut rd, version);
 
       if payload.is_none() {
         return false;
@@ -88,7 +88,7 @@ impl HandshakeJoiner {
 
       let m = Message {
         typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
+        version: version,
         payload: MessagePayload::Handshake(payload.unwrap())
       };
 
