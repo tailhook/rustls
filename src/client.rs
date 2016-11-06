@@ -382,8 +382,8 @@ impl ClientSessionImpl {
 
   pub fn is_handshaking(&self) -> bool {
     match self.state {
-      ConnState::TrafficTLS12 | ConnState::TrafficTLS13 => true,
-      _ => false
+      ConnState::TrafficTLS12 | ConnState::TrafficTLS13 => false,
+      _ => true
     }
   }
 
