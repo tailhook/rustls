@@ -47,7 +47,7 @@ impl Codec for PayloadU24 {
 
   fn read(r: &mut Reader) -> Option<PayloadU24> {
     let len = try_ret!(codec::read_u24(r)) as usize;
-    let sub = try_ret!(r.sub(len));
+    let mut sub = try_ret!(r.sub(len));
     let body = sub.rest().to_vec();
     Some(PayloadU24(body))
   }
@@ -73,7 +73,7 @@ impl Codec for PayloadU16 {
 
   fn read(r: &mut Reader) -> Option<PayloadU16> {
     let len = try_ret!(codec::read_u16(r)) as usize;
-    let sub = try_ret!(r.sub(len));
+    let mut sub = try_ret!(r.sub(len));
     let body = sub.rest().to_vec();
     Some(PayloadU16(body))
   }
@@ -99,7 +99,7 @@ impl Codec for PayloadU8 {
 
   fn read(r: &mut Reader) -> Option<PayloadU8> {
     let len = try_ret!(codec::read_u8(r)) as usize;
-    let sub = try_ret!(r.sub(len));
+    let mut sub = try_ret!(r.sub(len));
     let body = sub.rest().to_vec();
     Some(PayloadU8(body))
   }
