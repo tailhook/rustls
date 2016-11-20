@@ -289,7 +289,6 @@ impl ServerConfig {
 
 pub struct ServerHandshakeData {
   pub server_cert_chain: Option<CertificatePayload>,
-  pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub session_id: SessionID,
   pub randoms: SessionRandoms,
   pub transcript: hash_hs::HandshakeHash,
@@ -304,7 +303,6 @@ impl ServerHandshakeData {
   fn new() -> ServerHandshakeData {
     ServerHandshakeData {
       server_cert_chain: None,
-      ciphersuite: None,
       session_id: SessionID::empty(),
       randoms: SessionRandoms::for_server(),
       transcript: hash_hs::HandshakeHash::new(),
@@ -314,11 +312,6 @@ impl ServerHandshakeData {
       doing_client_auth: false,
       valid_client_cert_chain: None
     }
-  }
-
-  pub fn start_handshake_hash(&mut self) {
-    let hash = self.ciphersuite.as_ref().unwrap().get_hash();
-    self.transcript.start_hash(hash);
   }
 }
 
@@ -348,7 +341,7 @@ impl ServerSessionImpl {
       config: server_config.clone(),
       handshake_data: ServerHandshakeData::new(),
       secrets: None,
-      common: SessionCommon::new(None),
+      common: SessionCommon::new(None, false),
       alpn_protocol: None,
       state: ConnState::ExpectClientHello
     };
@@ -461,8 +454,7 @@ impl ServerSessionImpl {
   }
 
   pub fn start_encryption_tls12(&mut self) {
-    let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-    self.common.start_encryption_tls12(scs, self.secrets.as_ref().unwrap());
+    self.common.start_encryption_tls12(self.secrets.as_ref().unwrap());
   }
 
   pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
