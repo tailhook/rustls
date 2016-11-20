@@ -272,3 +272,40 @@ pub fn verify_signed_struct(message: &[u8],
     .map_err(|err| TLSError::WebPKIError(err))
 }
 
+fn convert_alg_tls13(scheme: SignatureScheme)
+    -> Result<&'static webpki::SignatureAlgorithm, TLSError> {
+  use msgs::enums::SignatureScheme::*;
+
+  match scheme {
+    ECDSA_NISTP256_SHA256 => Ok(&webpki::ECDSA_P256_SHA256),
+    ECDSA_NISTP384_SHA384 => Ok(&webpki::ECDSA_P384_SHA384),
+    RSA_PSS_SHA256 => Ok(&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
+    RSA_PSS_SHA384 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
+    RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
+    _ => {
+      let error_msg = format!("received unsupported sig scheme {:?}", scheme);
+      Err(TLSError::PeerMisbehavedError(error_msg))
+    }
+  }
+}
+
+pub fn verify_tls13(cert: &ASN1Cert,
+                    dss: &DigitallySignedStruct,
+                    handshake_hash: &[u8],
+                    context_string_with_0: &[u8]) -> Result<(), TLSError> {
+  let alg = try!(convert_alg_tls13(dss.scheme));
+
+  let mut msg = Vec::new();
+  msg.resize(64, 0x20u8);
+  msg.extend_from_slice(context_string_with_0);
+  msg.extend_from_slice(handshake_hash);
+
+  let cert_in = untrusted::Input::from(&cert.0);
+  let cert = try!(webpki::EndEntityCert::from(cert_in)
+                  .map_err(|err| TLSError::WebPKIError(err)));
+  try!(cert.verify_signature(alg,
+                             untrusted::Input::from(&msg),
+                             untrusted::Input::from(&dss.sig.0))
+       .map_err(|err| TLSError::WebPKIError(err)));
+  Ok(())
+}
